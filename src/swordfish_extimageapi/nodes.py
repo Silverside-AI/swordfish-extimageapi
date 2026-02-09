@@ -108,7 +108,7 @@ class SwordfishImageAPI:
 
     def call_api(self, image, prompt, model, seed):
        
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise RuntimeError(
                 "Gemini API key not set. Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable."
