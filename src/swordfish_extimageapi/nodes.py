@@ -130,7 +130,7 @@ class SwordfishImageAPI:
         except Exception as e:
             raise RuntimeError(f"Gemini API call failed: {e}") from e
         out_tensor = None
-        for part in response.parts:
+        for part in (response.parts or []):
             if part.inline_data is not None:
                 blob = part.inline_data
                 raw = (
@@ -142,7 +142,14 @@ class SwordfishImageAPI:
                 out_tensor = _pil_to_comfyui_image(pil_image)
                 break
         if out_tensor is None:
-            raise RuntimeError("Gemini API returned no image in the response.")
+            reason = ""
+            if response.candidates and len(response.candidates) > 0:
+                fr = getattr(response.candidates[0], "finish_reason", None)
+                if fr is not None:
+                    reason = f" (finish_reason={fr}). Try a different prompt or image."
+            if not reason:
+                reason = " in the response."
+            raise RuntimeError(f"Gemini API returned no image{reason}")
         return (torch.from_numpy(out_tensor),)
 
     """
