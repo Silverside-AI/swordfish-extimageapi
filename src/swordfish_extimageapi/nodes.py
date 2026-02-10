@@ -86,7 +86,7 @@ class SwordfishImageAPI:
             "required": {
                 "image": ("IMAGE", { "tooltip": "This is an image"}),
                 "prompt": ("STRING", { "tooltip": "This is a prompt", "multiline": True}),
-                "model": (["gemini-2.5-flash-image"],),
+                "model": (["gemini-2.5-flash-image", "gemini-3-pro-image-preview"],{"default": "gemini-2.5-flash-image"}),
                 "seed": ("INT", {
                     "default": 42,
                     "min": 0,
@@ -117,7 +117,7 @@ class SwordfishImageAPI:
         pil_input = _comfyui_image_to_pil(image)
         seed_clamped = min(max(0, int(seed)), 2147483647)
         config = types.GenerateContentConfig(
-            response_modalities=["TEXT", "IMAGE"],
+            response_modalities=["IMAGE"],
             seed=seed_clamped,
             image_config=types.ImageConfig(aspect_ratio="1:1")
         )
