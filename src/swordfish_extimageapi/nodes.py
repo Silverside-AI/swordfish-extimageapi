@@ -1,4 +1,5 @@
 import base64
+import logging
 import os
 from collections import deque
 from io import BytesIO
@@ -11,6 +12,8 @@ from PIL import Image, ImageFilter
 
 from google import genai
 from google.genai import types
+
+logger = logging.getLogger(__name__)
 
 
 def _dilate_mask(mask: torch.Tensor, kernel: torch.Tensor) -> torch.Tensor:
@@ -309,11 +312,19 @@ Parameters:
     def expand_mask(self, mask, expand, tapered_corners, flip_input, blur_radius,
                     incremental_expandrate, lerp_alpha, decay_factor, fill_holes=False):
         device = mask.device
-        
+        logger.info(
+            "expand_mask started shape=%s expand=%s tapered_corners=%s blur_radius=%s fill_holes=%s",
+            tuple(mask.shape), expand, tapered_corners, blur_radius, fill_holes,
+        )
+
         if flip_input:
             mask = 1.0 - mask
+            logger.debug("expand_mask: flipped input mask")
 
         grow_mask = mask.reshape((-1, mask.shape[-2], mask.shape[-1]))
+        num_frames = grow_mask.shape[0]
+        logger.debug("expand_mask: processing %s frame(s)", num_frames)
+
         out = []
         previous_output = None
         current_expand = expand
@@ -328,20 +339,24 @@ Parameters:
                                         [1, 1, 1]], dtype=torch.float32)
         
         kernel = kernel_data.unsqueeze(0).unsqueeze(0)
+        logger.debug("expand_mask: kernel tapered_corners=%s", tapered_corners)
 
-        for m in grow_mask:
+        for i, m in enumerate(grow_mask):
             output = m.unsqueeze(0).unsqueeze(0)
             kernel_device = kernel.to(output.device)
             
-            if abs(round(current_expand)) > 0:
-                for _ in range(abs(round(current_expand))):
+            steps = abs(round(current_expand))
+            if steps > 0:
+                op = "erode" if current_expand < 0 else "dilate"
+                logger.debug("expand_mask: frame %s/%s %s steps=%s", i + 1, num_frames, op, steps)
+                for _ in range(steps):
                     if current_expand < 0:
                         output = _erode_mask(output, kernel_device)
                     else:
                         output = _dilate_mask(output, kernel_device)
-            
+
             output = output.squeeze(0).squeeze(0)
-            
+
             if current_expand < 0:
                 current_expand -= abs(incremental_expandrate)
             else:
@@ -366,6 +381,7 @@ Parameters:
             out.append(output.cpu())
 
         if blur_radius > 0:
+            logger.debug("expand_mask: applying GaussianBlur radius=%s", blur_radius)
             blurred_out = []
             for tensor in out:
                 pil_image = _tensor_to_pil_mask(tensor)
@@ -373,9 +389,11 @@ Parameters:
                 blurred_tensor = _pil_to_tensor_mask(pil_image)
                 blurred_out.append(blurred_tensor)
             result = torch.cat(blurred_out, dim=0)
+            logger.info("expand_mask done result_shape=%s (blurred)", tuple(result.shape))
             return (result, 1.0 - result)
         else:
             result = torch.stack(out, dim=0)
+            logger.info("expand_mask done result_shape=%s", tuple(result.shape))
             return (result, 1.0 - result)
 
 
